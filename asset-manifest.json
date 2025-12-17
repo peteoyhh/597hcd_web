@@ -1,0 +1,13 @@
+{
+  "files": {
+    "main.css": "/597hcd_web/static/css/main.a8066114.css",
+    "main.js": "/597hcd_web/static/js/main.116bb81d.js",
+    "index.html": "/597hcd_web/index.html",
+    "main.a8066114.css.map": "/597hcd_web/static/css/main.a8066114.css.map",
+    "main.116bb81d.js.map": "/597hcd_web/static/js/main.116bb81d.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.a8066114.css",
+    "static/js/main.116bb81d.js"
+  ]
+}
