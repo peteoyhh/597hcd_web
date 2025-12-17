@@ -1,22 +1,8 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import './App.css';
-
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://597hcdweb-production.up.railway.app';
-
-// Category options (matching your data)
-const CATEGORIES = [
-  { id: 0, name: 'Comedy' },
-  { id: 1, name: 'Education' },
-  { id: 2, name: 'Entertainment' },
-  { id: 3, name: 'Gaming' },
-  { id: 4, name: 'Howto & Style' },
-  { id: 5, name: 'Music' },
-  { id: 6, name: 'News & Politics' },
-  { id: 7, name: 'Science & Technology' },
-  { id: 8, name: 'Sports' },
-  { id: 9, name: 'Travel & Events' },
-];
+import { API_BASE_URL, CATEGORIES } from './config';
+import { validateTitle, validateHashtags, validateDuration, sanitizeErrorMessage, isProduction } from './utils/validation';
 
 function App() {
   const [formData, setFormData] = useState({
@@ -70,10 +56,36 @@ function App() {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? (checked ? 1 : 0) : value,
-    }));
+    
+    // Apply validation and sanitization for text inputs
+    if (name === 'title') {
+      const validation = validateTitle(value);
+      if (validation.valid) {
+        setFormData(prev => ({ ...prev, [name]: validation.sanitized }));
+      } else {
+        // Still allow typing, but store the value (validation happens on submit)
+        setFormData(prev => ({ ...prev, [name]: value }));
+      }
+    } else if (name === 'hashtags') {
+      const validation = validateHashtags(value);
+      if (validation.valid) {
+        setFormData(prev => ({ ...prev, [name]: validation.sanitized }));
+      } else {
+        setFormData(prev => ({ ...prev, [name]: value }));
+      }
+    } else if (name === 'duration_sec') {
+      const validation = validateDuration(value);
+      if (validation.valid) {
+        setFormData(prev => ({ ...prev, [name]: validation.sanitized }));
+      } else {
+        setFormData(prev => ({ ...prev, [name]: value }));
+      }
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        [name]: type === 'checkbox' ? (checked ? 1 : 0) : value,
+      }));
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -82,17 +94,47 @@ function App() {
     setError(null);
     setResults(null);
 
+    // Validate inputs before submission
+    const titleValidation = validateTitle(formData.title);
+    if (!titleValidation.valid) {
+      setError(titleValidation.error);
+      setLoading(false);
+      return;
+    }
+
+    const hashtagsValidation = validateHashtags(formData.hashtags);
+    if (!hashtagsValidation.valid) {
+      setError(hashtagsValidation.error);
+      setLoading(false);
+      return;
+    }
+
+    const durationValidation = validateDuration(formData.duration_sec);
+    if (!durationValidation.valid) {
+      setError(durationValidation.error);
+      setLoading(false);
+      return;
+    }
+
     try {
       const payload = {
         ...formData,
+        title: titleValidation.sanitized,
+        hashtags: hashtagsValidation.sanitized,
+        duration_sec: durationValidation.sanitized,
         ...computedFields,
       };
 
       const response = await axios.post(`${API_BASE_URL}/predict`, payload);
       setResults(response.data);
     } catch (err) {
-      setError(err.response?.data?.detail || err.message || 'An error occurred');
-      console.error('Prediction error:', err);
+      const errorMessage = sanitizeErrorMessage(
+        err.response?.data?.detail || err.message
+      );
+      setError(errorMessage);
+      if (!isProduction()) {
+        console.error('Prediction error:', err);
+      }
     } finally {
       setLoading(false);
     }
@@ -116,7 +158,8 @@ function App() {
 
   // Handle YouTube crawl
   const handleCrawlYouTube = async () => {
-    if (!youtubeApiKey.trim()) {
+    const trimmedKey = youtubeApiKey.trim();
+    if (!trimmedKey) {
       setCrawlError('Please enter YouTube API key');
       return;
     }
@@ -127,17 +170,26 @@ function App() {
     setBatchResults(null);
 
     try {
+      // Use POST body instead of URL parameter for security
       const response = await axios.post(
-        `${API_BASE_URL}/crawl-youtube?api_key=${encodeURIComponent(youtubeApiKey)}`
+        `${API_BASE_URL}/crawl-youtube`,
+        { api_key: trimmedKey },
+        { headers: { 'Content-Type': 'application/json' } }
       );
       if (response.data.success) {
         setCrawledVideos(response.data.videos);
       } else {
-        setCrawlError(response.data.error || 'Failed to crawl YouTube videos');
+        const errorMessage = sanitizeErrorMessage(response.data.error);
+        setCrawlError(errorMessage || 'Failed to crawl YouTube videos');
       }
     } catch (err) {
-      setCrawlError(err.response?.data?.detail || err.message || 'An error occurred while crawling');
-      console.error('Crawl error:', err);
+      const errorMessage = sanitizeErrorMessage(
+        err.response?.data?.detail || err.message
+      );
+      setCrawlError(errorMessage || 'An error occurred while crawling');
+      if (!isProduction()) {
+        console.error('Crawl error:', err);
+      }
     } finally {
       setCrawlLoading(false);
     }
@@ -164,8 +216,13 @@ function App() {
         setBatchError('Failed to get predictions');
       }
     } catch (err) {
-      setBatchError(err.response?.data?.detail || err.message || 'An error occurred during prediction');
-      console.error('Batch prediction error:', err);
+      const errorMessage = sanitizeErrorMessage(
+        err.response?.data?.detail || err.message
+      );
+      setBatchError(errorMessage || 'An error occurred during prediction');
+      if (!isProduction()) {
+        console.error('Batch prediction error:', err);
+      }
     } finally {
       setBatchLoading(false);
     }
@@ -322,6 +379,7 @@ function App() {
                   value={formData.title}
                   onChange={handleChange}
                   placeholder="Enter video title"
+                  maxLength={200}
                   required
                 />
                 <span className="helper-text">
@@ -338,6 +396,7 @@ function App() {
                   value={formData.hashtags}
                   onChange={handleChange}
                   placeholder="#youtube #vlog #fun"
+                  maxLength={500}
                 />
                 <span className="helper-text">
                   Count: {computedFields.hashtag_count}
@@ -370,6 +429,7 @@ function App() {
                   value={formData.duration_sec}
                   onChange={handleChange}
                   min="0"
+                  max="86400"
                   step="1"
                   placeholder="300"
                   required
