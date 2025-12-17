@@ -101,12 +101,12 @@ except Exception as e:
     logger.info("Falling back to local model path...")
     
     # Fallback to local model if Hugging Face download fails
-if not BERT_PATH.exists():
+    if not BERT_PATH.exists():
         raise FileNotFoundError(f"BERT model not found at {BERT_PATH} and Hugging Face download failed")
 
     logger.info(f"Loading model from: {BERT_PATH}")
-tokenizer = DebertaV2Tokenizer.from_pretrained(str(BERT_PATH))
-bert_model = DebertaV2ForSequenceClassification.from_pretrained(str(BERT_PATH))
+    tokenizer = DebertaV2Tokenizer.from_pretrained(str(BERT_PATH))
+    bert_model = DebertaV2ForSequenceClassification.from_pretrained(str(BERT_PATH))
 
 bert_model = bert_model.to(device)
 bert_model.eval()
