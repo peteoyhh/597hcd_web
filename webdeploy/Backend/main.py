@@ -28,12 +28,20 @@ app = FastAPI(
 )
 
 # CORS middleware for React frontend
+# Allow both localhost (development) and GitHub Pages (production)
+# Note: CORS origin does not include path, only protocol + domain + port
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://peteoyhh.github.io",
+    ],
+    allow_origin_regex=r"https://.*\.github\.io",  # Allow all GitHub Pages subdomains
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # ==========================
@@ -472,17 +480,31 @@ SINGLE_PREDICT_MULTIPLIERS = {
 KEYWORDS = list(CATEGORY_MAPPING.keys())
 
 
+class CrawlYouTubeRequest(BaseModel):
+    api_key: Optional[str] = None
+
 @app.post("/crawl-youtube")
-def crawl_youtube(api_key: Optional[str] = Query(None, description="YouTube Data API v3 key")):
+def crawl_youtube(
+    request: CrawlYouTubeRequest = CrawlYouTubeRequest(),
+    api_key: Optional[str] = Query(None, description="YouTube Data API v3 key (alternative to POST body)")
+):
     """
     Crawl YouTube videos from 10 categories, 3 videos per category.
     Returns video data with features needed for BERT prediction.
+    
+    API key can be provided in POST body or query parameter.
     """
     try:
-        # Get API key from environment or parameter
-        youtube_api_key = api_key or os.getenv("YOUTUBE_API_KEY")
+        # Get API key from POST body (preferred), query parameter, or environment
+        youtube_api_key = None
+        if request and request.api_key:
+            youtube_api_key = request.api_key
+        elif api_key:
+            youtube_api_key = api_key
+        else:
+            youtube_api_key = os.getenv("YOUTUBE_API_KEY")
         if not youtube_api_key:
-            raise ValueError("YouTube API key is required. Set YOUTUBE_API_KEY environment variable or pass api_key parameter.")
+            raise ValueError("YouTube API key is required. Set YOUTUBE_API_KEY environment variable or pass api_key in request body or query parameter.")
         
         youtube = build("youtube", "v3", developerKey=youtube_api_key)
         
