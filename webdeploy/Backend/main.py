@@ -125,7 +125,6 @@ local_growth_dir.mkdir(exist_ok=True)
 growth_model_files = [
     "best_growth_model_metadata.json",
     "best_growth_model.pkl",
-    "best_growth_model_growth_model_metadata.json",
     "rf_1d.pkl",
     "rf_7d.pkl",
     "rf_30d.pkl",
